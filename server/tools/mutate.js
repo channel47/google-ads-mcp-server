@@ -39,17 +39,61 @@ export async function mutate(params) {
       validateOnly: dry_run
     });
 
-    const message = dry_run
-      ? 'Validation successful - no changes made'
-      : 'Mutations applied successfully';
+    // Extract results from response
+    const results = response.mutate_operation_responses || [];
+    const partialFailureErrors = [];
+
+    // Check for partial failure errors - these are returned in the response body,
+    // NOT thrown as exceptions when partial_failure=true
+    if (response.partial_failure_error) {
+      // Handle different error structures from the API
+      const errorDetails = response.partial_failure_error.errors
+        || response.partial_failure_error.details
+        || [];
+
+      for (const error of errorDetails) {
+        partialFailureErrors.push({
+          message: error.message || error.error_message || JSON.stringify(error),
+          error_code: error.error_code || error.code,
+          operation_index: error.location?.field_path_elements?.[0]?.index ?? -1
+        });
+      }
+    }
+
+    // If ALL operations failed, throw an error so it's not silent
+    if (partialFailureErrors.length > 0 && partialFailureErrors.length >= operations.length) {
+      const errorMessages = partialFailureErrors.map(e => e.message).join('; ');
+      throw new Error(`All operations failed: ${errorMessages}`);
+    }
+
+    // Calculate success/failure counts
+    const successCount = results.filter(r => r && r.resource_name).length;
+    const failCount = partialFailureErrors.length;
+
+    // Build appropriate message
+    let message;
+    if (dry_run) {
+      message = failCount > 0
+        ? `Validation completed with ${failCount} error(s) - no changes made`
+        : 'Validation successful - no changes made';
+    } else {
+      message = failCount > 0
+        ? `Mutations completed: ${successCount} succeeded, ${failCount} failed`
+        : 'Mutations applied successfully';
+    }
 
     return formatSuccess({
       summary: `${message} (${operations.length} operation${operations.length !== 1 ? 's' : ''})`,
-      data: response || [],
+      data: results.map(r => ({
+        resource_name: r?.resource_name || null
+      })),
       metadata: {
         dry_run,
         operations_count: operations.length,
-        customer_id
+        success_count: successCount,
+        failure_count: failCount,
+        customer_id,
+        ...(partialFailureErrors.length > 0 && { errors: partialFailureErrors })
       }
     });
   } catch (error) {
