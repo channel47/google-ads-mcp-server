@@ -67,8 +67,9 @@ export async function mutate(params) {
     }
 
     // Calculate success/failure counts
-    const successCount = results.filter(r => r && r.resource_name).length;
+    // Success = total operations minus failures (works for create, update, and remove)
     const failCount = partialFailureErrors.length;
+    const successCount = operations.length - failCount;
 
     // Build appropriate message
     let message;
