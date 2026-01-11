@@ -276,6 +276,51 @@ describe('normalizeOperations', () => {
       assert.deepStrictEqual(result, operations);
       assert.strictEqual(warnings.length, 0);
     });
+
+    test('normalizes Opteo format remove operation with object resource', () => {
+      const operations = [{
+        entity: 'label',
+        operation: 'remove',
+        resource: { resource_name: 'customers/123/labels/789' }
+      }];
+
+      const { operations: result, warnings } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'label');
+      assert.strictEqual(result[0].operation, 'remove');
+      // Resource should be extracted as string from the object
+      assert.strictEqual(result[0].resource, 'customers/123/labels/789');
+      assert.strictEqual(warnings.length, 0);
+    });
+
+    test('passes through Opteo format remove with string resource', () => {
+      const operations = [{
+        entity: 'label',
+        operation: 'remove',
+        resource: 'customers/123/labels/789'
+      }];
+
+      const { operations: result, warnings } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'label');
+      assert.strictEqual(result[0].operation, 'remove');
+      assert.strictEqual(result[0].resource, 'customers/123/labels/789');
+      assert.strictEqual(warnings.length, 0);
+    });
+
+    test('normalizes campaign_criterion remove operation', () => {
+      const operations = [{
+        entity: 'campaign_criterion',
+        operation: 'remove',
+        resource: { resource_name: 'customers/123/campaignCriteria/456~789' }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign_criterion');
+      assert.strictEqual(result[0].operation, 'remove');
+      assert.strictEqual(result[0].resource, 'customers/123/campaignCriteria/456~789');
+    });
   });
 
   describe('Standard format transformation', () => {
@@ -293,7 +338,7 @@ describe('normalizeOperations', () => {
       assert.strictEqual(warnings.length, 1);
     });
 
-    test('transforms remove operation', () => {
+    test('transforms remove operation with resource as string', () => {
       const operations = [{
         remove: 'customers/123/labels/789'
       }];
@@ -302,7 +347,8 @@ describe('normalizeOperations', () => {
 
       assert.strictEqual(result[0].entity, 'label');
       assert.strictEqual(result[0].operation, 'remove');
-      assert.strictEqual(result[0].resource.resource_name, 'customers/123/labels/789');
+      // Resource should be the string directly, not wrapped in an object
+      assert.strictEqual(result[0].resource, 'customers/123/labels/789');
       assert.strictEqual(warnings.length, 1);
     });
 

@@ -165,12 +165,13 @@ function transformToOpteoFormat(operation, index) {
 
   if (opType === 'remove') {
     // Remove operations have resource_name as string value
+    // The Opteo library expects resource to be the string directly for remove ops
     const resourceName = operation.remove;
     if (typeof resourceName !== 'string') {
       throw new Error(`Operation ${index}: 'remove' value must be a resource_name string`);
     }
     entity = inferEntityFromResourceName(resourceName);
-    resource = { resource_name: resourceName };
+    resource = resourceName;  // String, not object - Opteo expects { remove: "resource_name" }
   } else {
     // Create/Update operations have resource as object
     resource = operation[opType];
@@ -233,8 +234,16 @@ export function normalizeOperations(operations) {
     const op = operations[i];
 
     if (isOpteoFormat(op)) {
-      // Already in Opteo format - pass through
-      normalizedOps.push(op);
+      // Already in Opteo format - pass through, but normalize remove operations
+      // For remove ops, ensure resource is the string, not an object
+      if (op.operation === 'remove' && op.resource && typeof op.resource === 'object') {
+        normalizedOps.push({
+          ...op,
+          resource: op.resource.resource_name || op.resource
+        });
+      } else {
+        normalizedOps.push(op);
+      }
     } else {
       // Transform from standard format
       const transformed = transformToOpteoFormat(op, i);
