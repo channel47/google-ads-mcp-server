@@ -4,6 +4,15 @@
  */
 
 /**
+ * Entities that legitimately use resource_name in CREATE operations.
+ * These use temporary resource IDs (-1, -2, etc.) for atomic multi-resource creation.
+ * See: https://developers.google.com/google-ads/api/docs/mutating/overview
+ */
+const ENTITIES_REQUIRING_RESOURCE_NAME_IN_CREATE = new Set([
+  'campaign_budget'  // Used for temp IDs when creating budget + campaign atomically
+]);
+
+/**
  * Resource name URL path segments to entity type mapping
  * Based on Google Ads API resource name patterns
  */
@@ -191,6 +200,16 @@ function transformToOpteoFormat(operation, index) {
       `{ entity: "campaign", operation: "${opType}", resource: {...} } ` +
       `or add "_entity" field to your operation.`
     );
+  }
+
+  // Strip resource_name from CREATE operations (API generates it automatically)
+  // Exception: entities that use temp IDs for atomic multi-resource creation
+  // See: https://developers.google.com/google-ads/api/docs/campaigns/create-campaigns
+  if (opType === 'create' && resource.resource_name) {
+    if (!ENTITIES_REQUIRING_RESOURCE_NAME_IN_CREATE.has(entity)) {
+      const { resource_name, ...resourceWithoutName } = resource;
+      resource = resourceWithoutName;
+    }
   }
 
   return {

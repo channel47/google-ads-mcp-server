@@ -451,6 +451,119 @@ describe('normalizeOperations', () => {
       assert.strictEqual(result[0].operation, 'create');
     });
   });
+
+  // ============================================
+  // Campaign creation - resource_name stripping
+  // ============================================
+
+  describe('Campaign creation - resource_name stripping', () => {
+
+    test('strips resource_name from campaign create operation', () => {
+      const operations = [{
+        create: {
+          resource_name: 'customers/123/campaigns/-1',
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          status: 'PAUSED',
+          manual_cpc: {}
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign');
+      assert.strictEqual(result[0].operation, 'create');
+      assert.strictEqual(result[0].resource.resource_name, undefined);
+      assert.strictEqual(result[0].resource.name, 'Test Campaign');
+    });
+
+    test('preserves resource_name in campaign_budget create for atomic ops', () => {
+      const operations = [{
+        create: {
+          resource_name: 'customers/123/campaignBudgets/-1',
+          name: 'Test Budget',
+          amount_micros: 50000000
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign_budget');
+      assert.strictEqual(result[0].resource.resource_name, 'customers/123/campaignBudgets/-1');
+    });
+
+    test('preserves all other campaign fields when stripping resource_name', () => {
+      const operations = [{
+        create: {
+          resource_name: 'customers/123/campaigns/-1',
+          name: 'Test',
+          advertising_channel_type: 'DISPLAY',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          target_cpa: { target_cpa_micros: 25000000 },
+          network_settings: { target_content_network: true }
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].resource.name, 'Test');
+      assert.strictEqual(result[0].resource.advertising_channel_type, 'DISPLAY');
+      assert.deepStrictEqual(result[0].resource.target_cpa, { target_cpa_micros: 25000000 });
+      assert.deepStrictEqual(result[0].resource.network_settings, { target_content_network: true });
+      assert.strictEqual(result[0].resource.campaign_budget, 'customers/123/campaignBudgets/456');
+    });
+
+    test('does not strip resource_name from UPDATE operations', () => {
+      const operations = [{
+        update: {
+          resource_name: 'customers/123/campaigns/456',
+          status: 'PAUSED'
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign');
+      assert.strictEqual(result[0].operation, 'update');
+      assert.strictEqual(result[0].resource.resource_name, 'customers/123/campaigns/456');
+    });
+
+    test('strips resource_name from ad_group create operation', () => {
+      const operations = [{
+        create: {
+          resource_name: 'customers/123/adGroups/-1',
+          campaign: 'customers/123/campaigns/456',
+          name: 'Test Ad Group',
+          cpc_bid_micros: 1000000
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'ad_group');
+      assert.strictEqual(result[0].operation, 'create');
+      assert.strictEqual(result[0].resource.resource_name, undefined);
+      assert.strictEqual(result[0].resource.name, 'Test Ad Group');
+    });
+
+    test('campaign create without resource_name still works', () => {
+      const operations = [{
+        create: {
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          status: 'PAUSED'
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign');
+      assert.strictEqual(result[0].operation, 'create');
+      assert.strictEqual(result[0].resource.resource_name, undefined);
+    });
+  });
 });
 
 // ============================================

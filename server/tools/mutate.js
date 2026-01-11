@@ -60,10 +60,14 @@ export async function mutate(params) {
     if (partial_failure && error.errors && Array.isArray(error.errors)) {
       for (const err of error.errors) {
         const opIndex = err.location?.field_path_elements?.[0]?.index ?? -1;
+        // Extract full field path for debugging (e.g., "operations.create.campaign_bidding_strategy")
+        const fieldPath = err.location?.field_path_elements?.map(e => e.field_name).join('.') || null;
         partialFailureErrors.push({
           message: err.message || JSON.stringify(err.error_code),
           error_code: err.error_code,
-          operation_index: opIndex
+          operation_index: opIndex,
+          field_path: fieldPath,
+          trigger: err.trigger?.string_value || null
         });
       }
 
@@ -91,10 +95,13 @@ export async function mutate(params) {
       || [];
 
     for (const error of errorDetails) {
+      const fieldPath = error.location?.field_path_elements?.map(e => e.field_name).join('.') || null;
       partialFailureErrors.push({
         message: error.message || error.error_message || JSON.stringify(error),
         error_code: error.error_code || error.code,
-        operation_index: error.location?.field_path_elements?.[0]?.index ?? -1
+        operation_index: error.location?.field_path_elements?.[0]?.index ?? -1,
+        field_path: fieldPath,
+        trigger: error.trigger?.string_value || null
       });
     }
   }
