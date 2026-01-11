@@ -91,7 +91,19 @@ const TOOLS = [
   },
   {
     name: 'mutate',
-    description: 'Execute write operations using GoogleAdsService.Mutate. Supports all operation types. Default dry_run=true for safety.',
+    description: `Execute write operations using GoogleAdsService.Mutate. Default dry_run=true for safety.
+
+Supports two operation formats:
+
+1. Standard Google Ads format (auto-transformed):
+   { "update": { "resource_name": "customers/123/campaigns/456", "status": "PAUSED" } }
+   { "create": { "ad_group": "customers/123/adGroups/456", "keyword": {...} } }
+   { "remove": "customers/123/labels/789" }
+
+2. Opteo library format:
+   { "entity": "campaign", "operation": "update", "resource": { "resource_name": "...", "status": "PAUSED" } }
+
+Entity types are auto-inferred from resource_name patterns for updates/removes.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -101,7 +113,7 @@ const TOOLS = [
         },
         operations: {
           type: 'array',
-          description: 'Array of mutation operation objects',
+          description: 'Array of mutation operations. Supports standard format ({ create/update/remove: ... }) or Opteo format ({ entity, operation, resource }).',
           items: {
             type: 'object'
           }

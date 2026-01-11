@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { getCustomerClient } from '../auth.js';
 import { formatSuccess, formatError } from '../utils/response-format.js';
+import { normalizeOperations } from '../utils/operation-transform.js';
 
 /**
  * Execute mutation operations using GoogleAdsService.Mutate
@@ -34,9 +35,22 @@ export async function mutate(params) {
   let response;
   let partialFailureErrors = [];
 
+  // Transform operations to Opteo library format if needed
+  let normalizedOps;
+  try {
+    const result = normalizeOperations(operations);
+    normalizedOps = result.operations;
+    // Log transformation warnings for debugging
+    if (result.warnings.length > 0) {
+      console.error('Operation format transformations:', result.warnings);
+    }
+  } catch (transformError) {
+    return formatError(transformError);
+  }
+
   try {
     // Execute mutation with validation options
-    response = await customer.mutateResources(operations, {
+    response = await customer.mutateResources(normalizedOps, {
       partialFailure: partial_failure,
       validateOnly: dry_run
     });
