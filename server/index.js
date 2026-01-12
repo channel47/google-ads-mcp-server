@@ -103,7 +103,16 @@ Supports two operation formats:
 2. Opteo library format:
    { "entity": "campaign", "operation": "update", "resource": { "resource_name": "...", "status": "PAUSED" } }
 
-Entity types are auto-inferred from resource_name patterns for updates/removes.`,
+Entity types are auto-inferred from resource_name patterns for updates/removes.
+
+Asset Uploads:
+For IMAGE/VIDEO assets, use 'image_file_path' or 'video_file_path' with absolute file paths:
+   { "entity": "asset", "operation": "create", "resource": { "name": "My Image", "type": "IMAGE", "image_file_path": "/path/to/image.jpg" } }
+
+- Tool automatically reads, validates, and base64-encodes the file
+- Supported formats: JPEG (.jpg, .jpeg), PNG (.png with valid headers)
+- Maximum file size: 5MB
+- Paths must be absolute (e.g., /Users/name/image.jpg or C:\\Users\\name\\image.jpg)`,
     inputSchema: {
       type: 'object',
       properties: {
