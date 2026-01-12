@@ -3,6 +3,8 @@
  * Converts standard Google Ads API format to Opteo library format
  */
 
+import { transformImageAssetResource } from './image-asset.js';
+
 /**
  * Entities that legitimately use resource_name in CREATE operations.
  * These use temporary resource IDs (-1, -2, etc.) for atomic multi-resource creation.
@@ -213,6 +215,17 @@ function transformToOpteoFormat(operation, index) {
     }
   }
 
+  // Process image file paths in asset resources
+  if (opType === 'create' && entity === 'asset') {
+    const imageResult = transformImageAssetResource(resource);
+    if (imageResult.error) {
+      throw new Error(`Operation ${index}: ${imageResult.error}`);
+    }
+    if (imageResult.processed) {
+      resource = imageResult.resource;
+    }
+  }
+
   return {
     entity,
     operation: opType,
@@ -234,7 +247,23 @@ export function normalizeOperations(operations) {
     const op = operations[i];
 
     if (isOpteoFormat(op)) {
-      // Already in Opteo format - pass through, but normalize remove operations
+      // Already in Opteo format - pass through, but normalize special cases
+
+      // Handle image_file_path in Opteo format asset operations
+      if (op.entity === 'asset' && op.operation === 'create' && op.resource?.image_file_path) {
+        const imageResult = transformImageAssetResource(op.resource);
+        if (imageResult.error) {
+          throw new Error(`Operation ${i}: ${imageResult.error}`);
+        }
+        if (imageResult.processed) {
+          normalizedOps.push({
+            ...op,
+            resource: imageResult.resource
+          });
+          continue;
+        }
+      }
+
       // For remove ops, ensure resource is the string, not an object
       if (op.operation === 'remove' && op.resource && typeof op.resource === 'object') {
         normalizedOps.push({
