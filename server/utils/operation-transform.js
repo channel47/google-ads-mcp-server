@@ -28,8 +28,8 @@ const RESOURCE_PATH_TO_ENTITY = {
   'sharedCriteria': 'shared_criterion',
   'campaignBudgets': 'campaign_budget',
   'biddingStrategies': 'bidding_strategy',
-  'ads': 'ad_group_ad',
-  'adGroupAds': 'ad_group_ad',
+  'ads': 'ad',              // For ad content updates (RSA headlines, descriptions, URLs)
+  'adGroupAds': 'ad_group_ad', // For ad group membership and status changes
   'assets': 'asset',
   'conversionActions': 'conversion_action',
   'customerNegativeCriteria': 'customer_negative_criterion',

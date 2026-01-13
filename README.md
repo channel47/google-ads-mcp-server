@@ -105,6 +105,75 @@ Execute write operations using GoogleAdsService.Mutate.
 }
 ```
 
+#### Working with Responsive Search Ads (RSAs)
+
+RSAs have two different resource types with different mutability:
+
+| Resource | Entity | Use Case |
+|----------|--------|----------|
+| `customers/{id}/ads/{ad_id}` | `ad` | Update ad **content** (headlines, descriptions, URLs) |
+| `customers/{id}/adGroupAds/{ad_group_id}~{ad_id}` | `ad_group_ad` | Change ad **status** (pause, enable, remove) |
+
+**Update RSA headlines/descriptions** (use `entity: 'ad'`):
+```javascript
+{
+  "operations": [{
+    "entity": "ad",
+    "operation": "update",
+    "resource": {
+      "resource_name": "customers/1234567890/ads/9876543210",
+      "responsive_search_ad": {
+        "headlines": [
+          {"text": "New Headline 1"},
+          {"text": "New Headline 2"},
+          {"text": "New Headline 3"}
+        ],
+        "descriptions": [
+          {"text": "New Description 1"},
+          {"text": "New Description 2"}
+        ]
+      },
+      "final_urls": ["https://example.com"]
+    }
+  }],
+  "dry_run": false
+}
+```
+
+**Change RSA status** (use `entity: 'ad_group_ad'`):
+```javascript
+{
+  "operations": [{
+    "entity": "ad_group_ad",
+    "operation": "update",
+    "resource": {
+      "resource_name": "customers/1234567890/adGroupAds/111222333~9876543210",
+      "status": "PAUSED"
+    }
+  }],
+  "dry_run": false
+}
+```
+
+#### Creating Image Assets with File Paths
+
+When creating image assets, you can provide a local file path instead of base64 data:
+
+```javascript
+{
+  "operations": [{
+    "entity": "asset",
+    "operation": "create",
+    "resource": {
+      "name": "My Image Asset",
+      "image_file_path": "/path/to/image.png"
+    }
+  }]
+}
+```
+
+The server will automatically read the file and convert it to the required base64 format.
+
 ## Resources & Prompts
 
 The server provides:
