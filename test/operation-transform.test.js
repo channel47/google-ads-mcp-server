@@ -504,7 +504,7 @@ describe('normalizeOperations', () => {
 
   describe('Campaign creation - resource_name stripping', () => {
 
-    test('strips resource_name from campaign create operation', () => {
+    test('preserves resource_name for campaign create (needed for PMax atomic ops)', () => {
       const operations = [{
         create: {
           resource_name: 'customers/123/campaigns/-1',
@@ -520,7 +520,8 @@ describe('normalizeOperations', () => {
 
       assert.strictEqual(result[0].entity, 'campaign');
       assert.strictEqual(result[0].operation, 'create');
-      assert.strictEqual(result[0].resource.resource_name, undefined);
+      // resource_name is preserved for campaigns to support PMax atomic creation with temp IDs
+      assert.strictEqual(result[0].resource.resource_name, 'customers/123/campaigns/-1');
       assert.strictEqual(result[0].resource.name, 'Test Campaign');
     });
 
@@ -599,7 +600,8 @@ describe('normalizeOperations', () => {
           name: 'Test Campaign',
           advertising_channel_type: 'SEARCH',
           campaign_budget: 'customers/123/campaignBudgets/456',
-          status: 'PAUSED'
+          status: 'PAUSED',
+          manual_cpc: {}  // Bidding strategy required since API v19.2
         }
       }];
 
@@ -608,6 +610,122 @@ describe('normalizeOperations', () => {
       assert.strictEqual(result[0].entity, 'campaign');
       assert.strictEqual(result[0].operation, 'create');
       assert.strictEqual(result[0].resource.resource_name, undefined);
+    });
+  });
+
+  // ============================================
+  // Campaign creation - EU political advertising and bidding strategy
+  // ============================================
+
+  describe('Campaign creation - EU political advertising', () => {
+
+    test('auto-adds contains_eu_political_advertising if missing', () => {
+      const operations = [{
+        entity: 'campaign',
+        operation: 'create',
+        resource: {
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          manual_cpc: {}
+        }
+      }];
+
+      const { operations: result, warnings } = normalizeOperations(operations);
+
+      assert.strictEqual(
+        result[0].resource.contains_eu_political_advertising,
+        'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'
+      );
+      assert.ok(warnings.some(w => w.includes('contains_eu_political_advertising')));
+    });
+
+    test('preserves existing contains_eu_political_advertising value', () => {
+      const operations = [{
+        entity: 'campaign',
+        operation: 'create',
+        resource: {
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          manual_cpc: {},
+          contains_eu_political_advertising: 'CONTAINS_EU_POLITICAL_ADVERTISING'
+        }
+      }];
+
+      const { operations: result, warnings } = normalizeOperations(operations);
+
+      assert.strictEqual(
+        result[0].resource.contains_eu_political_advertising,
+        'CONTAINS_EU_POLITICAL_ADVERTISING'
+      );
+      // Should not have a warning about adding the field
+      assert.ok(!warnings.some(w => w.includes('Auto-added contains_eu_political_advertising')));
+    });
+
+    test('throws error if bidding strategy is missing', () => {
+      const operations = [{
+        entity: 'campaign',
+        operation: 'create',
+        resource: {
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456'
+          // No bidding strategy
+        }
+      }];
+
+      assert.throws(
+        () => normalizeOperations(operations),
+        /Campaign CREATE requires a bidding strategy/
+      );
+    });
+
+    test('accepts various bidding strategies', () => {
+      const biddingStrategies = [
+        { manual_cpc: {} },
+        { maximize_conversions: {} },
+        { maximize_conversion_value: { target_roas: 3.5 } },
+        { target_cpa: { target_cpa_micros: 5000000 } },
+        { target_spend: {} },
+        { bidding_strategy: 'customers/123/biddingStrategies/456' }
+      ];
+
+      for (const bidding of biddingStrategies) {
+        const operations = [{
+          entity: 'campaign',
+          operation: 'create',
+          resource: {
+            name: 'Test Campaign',
+            advertising_channel_type: 'SEARCH',
+            campaign_budget: 'customers/123/campaignBudgets/456',
+            ...bidding
+          }
+        }];
+
+        // Should not throw
+        const { operations: result } = normalizeOperations(operations);
+        assert.strictEqual(result[0].entity, 'campaign');
+      }
+    });
+
+    test('works with standard format campaign create', () => {
+      const operations = [{
+        create: {
+          name: 'Test Campaign',
+          advertising_channel_type: 'SEARCH',
+          campaign_budget: 'customers/123/campaignBudgets/456',
+          manual_cpc: {}
+        }
+      }];
+
+      const { operations: result } = normalizeOperations(operations);
+
+      assert.strictEqual(result[0].entity, 'campaign');
+      assert.strictEqual(
+        result[0].resource.contains_eu_political_advertising,
+        'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'
+      );
     });
   });
 });

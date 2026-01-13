@@ -11,8 +11,35 @@ import { transformImageAssetResource } from './image-asset.js';
  * See: https://developers.google.com/google-ads/api/docs/mutating/overview
  */
 const ENTITIES_REQUIRING_RESOURCE_NAME_IN_CREATE = new Set([
-  'campaign_budget'  // Used for temp IDs when creating budget + campaign atomically
+  'campaign_budget',  // Used for temp IDs when creating budget + campaign atomically
+  'campaign'          // Used for temp IDs when creating campaign + asset group atomically (PMax)
 ]);
+
+/**
+ * Valid bidding strategy fields for campaigns.
+ * Exactly ONE must be present for campaign creation.
+ * See: https://developers.google.com/google-ads/api/docs/campaigns/bidding/assign-strategies
+ */
+const CAMPAIGN_BIDDING_STRATEGIES = [
+  'manual_cpc',
+  'manual_cpm',
+  'manual_cpv',
+  'maximize_conversions',
+  'maximize_conversion_value',
+  'target_cpa',
+  'target_roas',
+  'target_spend',
+  'target_impression_share',
+  'percent_cpc',
+  'commission',
+  'bidding_strategy'  // Portfolio bidding strategy reference
+];
+
+/**
+ * Default value for EU political advertising field.
+ * Required for all campaign creation since API v19.2 (September 2025).
+ */
+const DEFAULT_EU_POLITICAL_ADVERTISING = 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING';
 
 /**
  * Resource name URL path segments to entity type mapping
@@ -122,6 +149,42 @@ function inferEntityFromCreateResource(resource) {
 }
 
 /**
+ * Process campaign resource for CREATE operations.
+ * - Adds required contains_eu_political_advertising field if missing
+ * - Validates bidding strategy is present
+ * @param {Object} resource - Campaign resource object
+ * @param {number} index - Operation index for error messages
+ * @returns {{ resource: Object, warnings: string[] }} - Processed resource and warnings
+ * @throws {Error} - If validation fails
+ */
+function processCampaignCreate(resource, index) {
+  const warnings = [];
+  let processedResource = { ...resource };
+
+  // Add EU political advertising field if missing (required since API v19.2)
+  if (!processedResource.contains_eu_political_advertising) {
+    processedResource.contains_eu_political_advertising = DEFAULT_EU_POLITICAL_ADVERTISING;
+    warnings.push(
+      `Operation ${index}: Auto-added contains_eu_political_advertising='${DEFAULT_EU_POLITICAL_ADVERTISING}' (required since API v19.2)`
+    );
+  }
+
+  // Validate bidding strategy is present
+  const hasBiddingStrategy = CAMPAIGN_BIDDING_STRATEGIES.some(
+    field => processedResource[field] !== undefined
+  );
+
+  if (!hasBiddingStrategy) {
+    throw new Error(
+      `Operation ${index}: Campaign CREATE requires a bidding strategy. ` +
+      `Set one of: ${CAMPAIGN_BIDDING_STRATEGIES.join(', ')}`
+    );
+  }
+
+  return { resource: processedResource, warnings };
+}
+
+/**
  * Check if operation is already in Opteo format
  * @param {Object} operation
  * @returns {boolean}
@@ -226,10 +289,19 @@ function transformToOpteoFormat(operation, index) {
     }
   }
 
+  // Process campaign CREATE operations (EU political advertising, bidding strategy validation)
+  let campaignWarnings = [];
+  if (opType === 'create' && entity === 'campaign') {
+    const campaignResult = processCampaignCreate(resource, index);
+    resource = campaignResult.resource;
+    campaignWarnings = campaignResult.warnings;
+  }
+
   return {
     entity,
     operation: opType,
-    resource
+    resource,
+    _campaignWarnings: campaignWarnings  // Pass warnings up for logging
   };
 }
 
@@ -248,6 +320,7 @@ export function normalizeOperations(operations) {
 
     if (isOpteoFormat(op)) {
       // Already in Opteo format - pass through, but normalize special cases
+      let normalizedOp = { ...op };
 
       // Handle image_file_path in Opteo format asset operations
       if (op.entity === 'asset' && op.operation === 'create' && op.resource?.image_file_path) {
@@ -256,28 +329,33 @@ export function normalizeOperations(operations) {
           throw new Error(`Operation ${i}: ${imageResult.error}`);
         }
         if (imageResult.processed) {
-          normalizedOps.push({
-            ...op,
-            resource: imageResult.resource
-          });
-          continue;
+          normalizedOp.resource = imageResult.resource;
         }
+      }
+
+      // Handle campaign CREATE operations (EU political advertising, bidding strategy)
+      if (op.entity === 'campaign' && op.operation === 'create' && op.resource) {
+        const campaignResult = processCampaignCreate(op.resource, i);
+        normalizedOp.resource = campaignResult.resource;
+        warnings.push(...campaignResult.warnings);
       }
 
       // For remove ops, ensure resource is the string, not an object
       if (op.operation === 'remove' && op.resource && typeof op.resource === 'object') {
-        normalizedOps.push({
-          ...op,
-          resource: op.resource.resource_name || op.resource
-        });
-      } else {
-        normalizedOps.push(op);
+        normalizedOp.resource = op.resource.resource_name || op.resource;
       }
+
+      normalizedOps.push(normalizedOp);
     } else {
       // Transform from standard format
       const transformed = transformToOpteoFormat(op, i);
-      normalizedOps.push(transformed);
-      warnings.push(`Operation ${i}: Transformed from standard format (entity: ${transformed.entity})`);
+      // Collect campaign warnings and strip internal property
+      if (transformed._campaignWarnings?.length > 0) {
+        warnings.push(...transformed._campaignWarnings);
+      }
+      const { _campaignWarnings, ...cleanTransformed } = transformed;
+      normalizedOps.push(cleanTransformed);
+      warnings.push(`Operation ${i}: Transformed from standard format (entity: ${cleanTransformed.entity})`);
     }
   }
 

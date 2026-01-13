@@ -174,6 +174,63 @@ When creating image assets, you can provide a local file path instead of base64 
 
 The server will automatically read the file and convert it to the required base64 format.
 
+#### Creating Campaigns
+
+Campaign creation requires specific fields since Google Ads API v19.2 (September 2025):
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Campaign name |
+| `advertising_channel_type` | Yes | Campaign type (SEARCH, DISPLAY, etc.) |
+| `campaign_budget` | Yes | Reference to budget resource |
+| `bidding strategy` | Yes | One of: `manual_cpc`, `maximize_conversions`, `target_cpa`, etc. |
+| `contains_eu_political_advertising` | Auto | Auto-defaults to `DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING` |
+
+**Complete campaign creation example:**
+```javascript
+{
+  "operations": [
+    // 1. Create budget first (with temp ID for atomic creation)
+    {
+      "entity": "campaign_budget",
+      "operation": "create",
+      "resource": {
+        "resource_name": "customers/1234567890/campaignBudgets/-1",
+        "name": "My Budget",
+        "amount_micros": 10000000,
+        "delivery_method": "STANDARD"
+      }
+    },
+    // 2. Create campaign referencing the budget
+    {
+      "entity": "campaign",
+      "operation": "create",
+      "resource": {
+        "name": "My Search Campaign",
+        "advertising_channel_type": "SEARCH",
+        "status": "PAUSED",
+        "campaign_budget": "customers/1234567890/campaignBudgets/-1",
+        "manual_cpc": { "enhanced_cpc_enabled": false },
+        "network_settings": {
+          "target_google_search": true,
+          "target_search_network": true
+        }
+      }
+    }
+  ],
+  "dry_run": false
+}
+```
+
+**Supported bidding strategies:**
+- `manual_cpc` - Manual cost-per-click
+- `maximize_conversions` - Maximize conversions
+- `maximize_conversion_value` - Maximize conversion value (with optional `target_roas`)
+- `target_cpa` - Target cost-per-acquisition
+- `target_spend` - Maximize clicks (target spend)
+- `target_impression_share` - Target impression share
+- `bidding_strategy` - Reference to portfolio bidding strategy
+
 ## Resources & Prompts
 
 The server provides:
