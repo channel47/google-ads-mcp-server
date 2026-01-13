@@ -51,8 +51,8 @@ export async function mutate(params) {
   try {
     // Execute mutation with validation options
     response = await customer.mutateResources(normalizedOps, {
-      partialFailure: partial_failure,
-      validateOnly: dry_run
+      partial_failure: partial_failure,
+      validate_only: dry_run
     });
   } catch (error) {
     // The Opteo library throws exceptions with error.errors array for partial failures
